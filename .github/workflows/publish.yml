@@ -10,8 +10,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/galpine
-  # Every platform the official alpine image is published for
-  PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386,linux/ppc64le,linux/riscv64,linux/s390x
 
 jobs:
   build:
@@ -24,51 +22,76 @@ jobs:
       matrix:
         alpine: ['3.23', '3.24', 'latest']
     steps:
-      - uses: actions/checkout@v7
+    - uses: actions/checkout@v7
 
-      # glibc is cross-compiled natively; QEMU only runs the packaging stages
-      - uses: docker/setup-qemu-action@v4
+    - uses: docker/setup-qemu-action@v4 # glibc is cross-compiled natively; QEMU only runs the packaging stages
 
-      - uses: docker/setup-buildx-action@v4
+    - uses: docker/setup-buildx-action@v4
 
-      - uses: docker/login-action@v4
-        if: github.event_name != 'pull_request'
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Detect platforms published for alpine:${{ matrix.alpine }}
+      id: platforms
+      run: |
+        platforms=$(docker buildx imagetools inspect "alpine:${{ matrix.alpine }}" --raw \
+          | jq -r '[.manifests[].platform | select(.os != "unknown")
+                   | "\(.os)/\(.architecture)\(if .variant then "/" + .variant else "" end)"]
+                   | join(",")')
+        test -n "$platforms"
+        echo "Platforms: $platforms"
+        echo "list=$platforms" >> "$GITHUB_OUTPUT"
 
-      - id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: latest=false
-          tags: |
-            type=raw,value=${{ matrix.alpine }},enable={{is_default_branch}}
-            type=semver,pattern={{version}},suffix=-alpine${{ matrix.alpine }}
+    - uses: docker/login-action@v4
+      if: github.event_name != 'pull_request'
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build (amd64, for testing)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64
-          build-args: ALPINE_VERSION=${{ matrix.alpine }}
-          load: true
-          tags: galpine:test
-          cache-from: type=gha,scope=alpine-${{ matrix.alpine }}
-          cache-to: type=gha,mode=max,scope=alpine-${{ matrix.alpine }}
+    - id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        flavor: latest=false
+        tags: |
+          type=raw,value=${{ matrix.alpine }},enable={{is_default_branch}}
+          type=semver,pattern={{version}},suffix=-alpine${{ matrix.alpine }}
 
-      - name: Test
-        run: docker run --rm -i galpine:test sh < test.sh
+    - name: Build all platforms
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        platforms: ${{ steps.platforms.outputs.list }}
+        build-args: ALPINE_VERSION=${{ matrix.alpine }}
+        cache-from: type=gha,scope=alpine-${{ matrix.alpine }}
+        cache-to: type=gha,mode=max,scope=alpine-${{ matrix.alpine }}
 
-      - name: Build all platforms and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: ${{ env.PLATFORMS }}
-          build-args: ALPINE_VERSION=${{ matrix.alpine }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=alpine-${{ matrix.alpine }}
-          cache-to: type=gha,mode=max,scope=alpine-${{ matrix.alpine }}
+    # Each platform is re-exported from the builder's local cache (no rebuild)
+    # and run under QEMU, so nothing is pushed unless every platform passes.
+    - name: Test all platforms
+      run: |
+        failed=""
+        for platform in $(echo "${{ steps.platforms.outputs.list }}" | tr ',' ' '); do
+          echo "::group::Test $platform"
+          docker buildx build --platform "$platform" \
+            --build-arg ALPINE_VERSION=${{ matrix.alpine }} \
+            --load -t galpine:test .
+          if docker run --rm -i --platform "$platform" galpine:test sh < test.sh; then
+            echo "$platform: OK"
+          else
+            echo "::error::Smoke test failed on $platform"
+            failed="$failed $platform"
+          fi
+          echo "::endgroup::"
+        done
+        test -z "$failed" || { echo "Failed:$failed"; exit 1; }
+
+    - name: Push
+      if: github.event_name != 'pull_request'
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        platforms: ${{ steps.platforms.outputs.list }}
+        build-args: ALPINE_VERSION=${{ matrix.alpine }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha,scope=alpine-${{ matrix.alpine }}
