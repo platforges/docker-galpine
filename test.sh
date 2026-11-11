@@ -1,25 +1,24 @@
-# Run as:
-# docker run galpine sh -c "$(cat test.sh)"
+#!/bin/sh
+# Smoke test: a glibc-linked Miniconda must run and import numpy.
+# Run as: docker run --rm -i ghcr.io/platforges/galpine sh < test.sh
+set -eu
 
-CONDA_VERSION="4.7.12.1"
-CONDA_DIR="/opt/conda"
-PATH="$CONDA_DIR/bin:$PATH"
-PYTHONDONTWRITEBYTECODE=1
+CONDA_DIR=/opt/conda
+export PATH="$CONDA_DIR/bin:$PATH"
+export PYTHONDONTWRITEBYTECODE=1
+
 apk add --no-cache bash ca-certificates wget
-mkdir -p "$CONDA_DIR"
-wget "http://repo.continuum.io/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh" -O miniconda.sh
-bash miniconda.sh -f -b -p "$CONDA_DIR"
-echo "export PATH=$CONDA_DIR/bin:\$PATH" > /etc/profile.d/conda.sh
-conda update --all --yes
-conda config --set auto_update_conda False
-rm -f miniconda.sh
-conda clean --all --force-pkgs-dirs --yes
-find "$CONDA_DIR" -follow -type f \( -iname '*.a' -o -iname '*.pyc' -o -iname '*.js.map' \) -delete
-mkdir -p "$CONDA_DIR/locks"
-chmod 777 "$CONDA_DIR/locks"
+wget -qO /tmp/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash /tmp/miniconda.sh -b -p "$CONDA_DIR"
+rm /tmp/miniconda.sh
 
-conda config --add channels conda-forge
-conda install -y numpy
-python -c 'import numpy as np; print(np.array([0, 1, 2]).tolist())'
+# Use conda-forge only, avoiding the Anaconda defaults channel terms of service
+conda install --yes --quiet --override-channels -c conda-forge numpy
 
-echo "¯\_(ツ)_/¯"
+python - <<'PY'
+import conda
+import numpy as np
+
+assert np.array([0, 1, 2]).tolist() == [0, 1, 2]
+print(f"conda {conda.__version__}, numpy {np.__version__}: OK")
+PY

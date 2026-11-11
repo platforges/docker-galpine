@@ -2,10 +2,11 @@ pkgname="glibc"
 pkgver="$GLIBC_VERSION"
 pkgrel="0"
 pkgdesc="GNU C Library compatibility layer for Alpine Linux"
-url="https://github.com/3778/docker-galpine"
-arch="x86_64"
-license="LGPL"
-subpackages="$pkgname-dev $pkgname-bin $pkgname-i18n"
+url="https://github.com/platforges/docker-galpine"
+arch="all"
+options="!check !tracedeps lib64"
+license="LGPL-2.1-or-later"
+subpackages="$pkgname-dev $pkgname-bin $pkgname-i18n:i18n:noarch"
 source="glibc-bin.tar.xz ld.so.conf"
 triggers="$pkgname-bin.trigger=/lib:/usr/lib:/usr/glibc/lib"
 
@@ -21,10 +22,14 @@ package() {
     rm -rf $pkgdir/usr/glibc/lib/audit
     rm -rf $pkgdir/usr/glibc/share
     rm -rf $pkgdir/usr/glibc/var
-    # FIXME these symbolic links error on trigger in galpine container
-    ln -s /usr/glibc/lib/ld-linux-x86-64.so.2 $pkgdir/lib/ld-linux-x86-64.so.2
-    ln -s /usr/glibc/lib/ld-linux-x86-64.so.2 $pkgdir/lib64/ld-linux-x86-64.so.2
-    ln -s /usr/glibc/lib/ld-linux-x86-64.so.2 $pkgdir/usr/glibc/lib64/ld-linux-x86-64.so.2
+    # Expose the glibc dynamic loader at the standard paths for this arch
+    for loader in $srcdir/usr/glibc/lib/ld-*.so.* $srcdir/usr/glibc/lib/ld64.so.*; do
+        [ -e "$loader" ] || continue
+        name=$(basename "$loader")
+        ln -s /usr/glibc/lib/$name $pkgdir/lib/$name
+        ln -s /usr/glibc/lib/$name $pkgdir/lib64/$name
+        ln -s /usr/glibc/lib/$name $pkgdir/usr/glibc/lib64/$name
+    done
     ln -s /usr/glibc/etc/ld.so.cache $pkgdir/etc/ld.so.cache
 }
 
@@ -37,7 +42,6 @@ bin() {
 
 i18n() {
     depends="$pkgname-bin"
-    arch="noarch"
     mkdir -p $subpkgdir/usr/glibc
     cp -a $srcdir/usr/glibc/share $subpkgdir/usr/glibc
 }
