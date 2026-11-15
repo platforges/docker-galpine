@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths:
+    - .github/workflows/publish.yml
+    - Dockerfile
+    - APKBUILD
+    - test.sh
   pull_request:
   workflow_dispatch:
 
@@ -55,7 +60,7 @@ jobs:
 
     # Each platform is re-exported from the builder's local cache (no rebuild)
     # and run under QEMU, so nothing is pushed unless every platform passes.
-    - name: Test
+    - name: Smoke Test
       run: |
         failed=""
         for platform in $(echo "${{ env.PLATFORMS }}" | tr ',' ' '); do
