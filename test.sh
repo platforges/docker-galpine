@@ -7,8 +7,10 @@ CONDA_DIR=/opt/conda
 export PATH="$CONDA_DIR/bin:$PATH"
 export PYTHONDONTWRITEBYTECODE=1
 
+ARCH=$(uname -m) # x86_64 or aarch64
+
 apk add --no-cache bash ca-certificates wget
-wget -qO /tmp/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+wget -qO /tmp/miniconda.sh "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-$ARCH.sh"
 bash /tmp/miniconda.sh -b -p "$CONDA_DIR"
 rm /tmp/miniconda.sh
 

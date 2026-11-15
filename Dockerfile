@@ -12,12 +12,6 @@ ARG TARGETVARIANT
 RUN case "$TARGETARCH$TARGETVARIANT" in \
         amd64)   triplet=x86_64-linux-gnu ;; \
         arm64*)  triplet=aarch64-linux-gnu ;; \
-        armv7)   triplet=arm-linux-gnueabihf ;; \
-        armv6)   triplet=arm-linux-gnueabihf; cflags='-march=armv6kz+fp -mfpu=vfp -marm' ;; \
-        386)     triplet=i686-linux-gnu; cflags='-march=i686' ;; \
-        ppc64le) triplet=powerpc64le-linux-gnu ;; \
-        riscv64) triplet=riscv64-linux-gnu ;; \
-        s390x)   triplet=s390x-linux-gnu ;; \
         *) echo "unsupported platform: $TARGETARCH$TARGETVARIANT" >&2; exit 1 ;; \
     esac && \
     echo "$triplet" > /triplet && echo "-O2 ${cflags:-}" > /cflags && \

@@ -11,10 +11,8 @@ with an apk trigger modifies the linker configuration giving preference to
 
 
 ## Usage
-
-Images are published to the GitHub Container Registry for every platform the
-official `alpine` image supports (`amd64`, `arm64`, `arm/v7`, `arm/v6`, `386`,
-`ppc64le`, `riscv64`, `s390x`), tagged by Alpine version:
+Images are published to the GitHub Container Registry for `linux/amd64` and
+`linux/arm64/v8` (the platforms Miniconda supports), tagged by Alpine version:
 
 ```sh
 docker pull ghcr.io/platforges/galpine:latest
@@ -23,11 +21,10 @@ docker pull ghcr.io/platforges/galpine:3.23
 ```
 
 ## Building
-
 ```sh
 make build ALPINE_VERSION=3.24   # build for linux/amd64
 make test  ALPINE_VERSION=3.24   # Miniconda + numpy smoke test
-make build PLATFORM=linux/arm64  # other platforms need QEMU/binfmt
+make build PLATFORM=linux/arm64  # non-native platforms need QEMU/binfmt
 ```
 
 glibc is cross-compiled on the build host, so only the packaging stages run
